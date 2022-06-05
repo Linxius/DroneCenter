@@ -37,54 +37,45 @@ from pyqtgraph import LayoutWidget
 
 import trimesh
 import numpy as np
+from path import Trajectory, PathNode
 
 
-class ViewerMeshItem():
-    def __init__(self) -> None:
-        self.setup()
-
-    def __init__(self, mesh_path) -> None:
-        self.setup()
-        self.load_mesh(mesh_path)
-
-    def setup(self):
-        self.mesh = None
-        self.path = None
-        self.name = None
-        self.item = None
-
-    def load_mesh(self, mesh_path=r'F:\projects\DroneCenter\test_data\xuexiao_coarse.ply'):
-        self.mesh = trimesh.load_mesh(mesh_path)
-        self.name = os.path.basename(mesh_path).split(os.sep)[0]
-        self.item = gl.GLMeshItem(
-            vertexes=self.mesh.vertices,
-            faces=self.mesh.faces, shader='viewNormalColor',
-            glOptions='opaque', smooth=False)
-        pass
+class ViewerItemContainer():
+    def __init__(self, path, display=True) -> None:
+        self.display = display
+        self.load(path)
 
     def is_empty(self):
         return self.item == None
 
+    def len(self):
+        if self.is_empty():
+            return 0
+        else:
+            return 1
 
-class ViewerSampleItem():
-    def __init__(self) -> None:
-        self.setup()
+class ViewerMeshItemContainer(ViewerItemContainer):
+    def __init__(self, path) -> None:
+        super().__init__(path)
 
-    def __init__(self, sample_path) -> None:
-        self.setup()
-        self.load_sample(sample_path)
+    def load(self, mesh_path=r'F:\projects\DroneCenter\test_data\xuexiao_coarse.ply'):
+        self.mesh = trimesh.load_mesh(mesh_path)
+        self.name = os.path.basename(mesh_path)
+        self.item = gl.GLMeshItem(
+            vertexes=self.mesh.vertices,
+            faces=self.mesh.faces, shader='viewNormalColor',
+            glOptions='opaque', smooth=False)
 
-    def setup(self):
-        self.sample = None
+class ViewerSampleItemContainer(ViewerItemContainer):
+    def __init__(self, path, display=True) -> None:
         self.size = 2.
-        # self.radius = .5
-        self.color = None
+        super().__init__(path, display)
 
-    def load_sample(self, mesh_path=r'F:\projects\DroneCenter\test_data\xuexiao_coarse_90.ply', color=None):
+    def load(self, mesh_path=r'F:\projects\DroneCenter\test_data\xuexiao_coarse_90.ply', color=None):
         self.sample = trimesh.load_mesh(mesh_path)
-        self.name = os.path.basename(mesh_path).split(os.sep)[0]
+        self.name = os.path.basename(mesh_path)
         self.set_item()
-        pass
+        self.set_color(color)
 
     def set_sample(self, sample, name='samples', color=None):
         self.name = name
@@ -111,63 +102,16 @@ class ViewerSampleItem():
         else:
             self.color = color
 
-
-class PathNode():
-    def __init__(self, x, y, z, pitch, roll, yaw) -> None:
-        self.x, self.y, self.z, self.pitch, self.roll, self.yaw = \
-            x, y, z, pitch, roll, yaw
-        pass
-
-
-class Trajectory():
-    def __init__(self) -> None:
-        self.path = []
-        pass
-
-    def __init__(self, log_path) -> None:
-        self.path = []
-        self.load_smith18_path(log_path)
-        pass
-
-    def load_smith18_path(self, log_path):
-        f = open(log_path, 'r')
-        lines = f.readlines()
-        self.path = []
-        for i, line in enumerate(lines):
-            imagename, x, y, z, pitch, roll, yaw = line.split(',')
-            # as the same format used in C++ program
-            x, y, z, pitch, roll, yaw = - \
-                float(x)/100, float(y)/100, float(z)/100, - \
-                float(pitch), float(roll), 90-float(yaw)
-            node = PathNode(x, y, z, pitch, roll, yaw)
-            self.path.append(node)
-
-    def len(self):
-        return len(self.path)
-
-    def is_empty(self):
-        return self.len() == 0
-
-
-class ViewerPathItem():
-    def __init__(self) -> None:
-        self.setup()
-
-    def __init__(self, log_path) -> None:
-        self.setup()
-        self.load_path(log_path)
-
-    def setup(self):
-        self.path = None
-        self.name = None
-        self.item = None
-        self.color = None
+class ViewerPathItemContainer(ViewerItemContainer):
+    def __init__(self, path, display=True) -> None:
         self.radius = [.8, 0.]
         self.length = 4.
+        super().__init__(path, display)
 
-    def load_path(self, log_path=r'H:\final_trajectory.log', color=None):
+    def load(self, log_path=r'H:\final_trajectory.log', color=None):
         self.path = Trajectory(log_path)
-        self.name = os.path.basename(log_path).split(os.sep)[0]
+        self.name = os.path.basename(log_path)
+        self.set_color(color)
         self.set_item()
 
     def set_path(self, trajectory, name='path', color=None):
@@ -191,7 +135,7 @@ class ViewerPathItem():
 
     def set_color(self, color=None):
         path_len = len(self.path.path)
-        if self.color == None or not self.color.size(0) == path_len:
+        if color == None or not color.size(0) == path_len:
             self.color = np.tile(np.array((0., 0., 1., 1.)), (path_len, 1))
         else:
             self.color = color
@@ -204,8 +148,11 @@ class ViewerPathItem():
         self.length = length
         self.set_item()
 
-    def is_empty(self):
-        return self.item == None
+    def len(self):
+        if self.is_empty():
+            return 0
+        else:
+            return len(self.item)
 
 
 class MeshViewerWidget(gl.GLViewWidget):
@@ -223,28 +170,44 @@ class MeshViewerWidget(gl.GLViewWidget):
         axis.translate(0.5, 0.5, 0.5)
         self.addItem(axis)
 
-        self.meshitem_list = []
-        self.pathitem_list = []
-        self.sampleitem_list = []
+        self.meshContainer_list = []
+        self.pathContainer_list = []
+        self.sampleContainer_list = []
 
-        self.load_mesh()
-        self.load_path()
-        self.load_sample()
+        self.load_example()
+
+    def load_example(self):
+        src_dir = os.path.dirname(os.path.abspath(__file__))
+        self.load_mesh(os.path.join(src_dir, '../test_data/xuexiao_coarse.ply'))
+        self.load_sample(os.path.join(src_dir, '../test_data/xuexiao_coarse_90.ply'))
+        self.load_path(os.path.join(src_dir, '../test_data/final_trajectory.log'))
 
     def load_mesh(self, mesh_path=r'F:\projects\DroneCenter\test_data\xuexiao_coarse.ply'):
-        meshitem = ViewerMeshItem(mesh_path)
-        self.meshitem_list.append(meshitem)
-        self.addItem(meshitem.item)
+        mesh_container = ViewerMeshItemContainer(mesh_path)
+        self.meshContainer_list.append(mesh_container)
+        self.addItemContainer(mesh_container)
 
     def load_path(self, log_path=r'F:\projects\DroneCenter\test_data\final_trajectory.log'):
-        pathitem = ViewerPathItem(log_path)
-        self.pathitem_list.append(pathitem)
-        for item in pathitem.item:
-            self.addItem(item)
+        path_container = ViewerPathItemContainer(log_path)
+        self.pathContainer_list.append(path_container)
+        self.addItemContainer(path_container)
 
     def load_sample(self, sample_path=r'F:\projects\DroneCenter\test_data\xuexiao_coarse_90.ply'):
-        sampleitem = ViewerSampleItem(sample_path)
-        self.sampleitem_list.append(sampleitem)
-        self.addItem(sampleitem.item)
-        # for item in sampleitem.item:
-        #     self.addItem(item)
+        sample_container = ViewerSampleItemContainer(sample_path)
+        self.sampleContainer_list.append(sample_container)
+        self.addItemContainer(sample_container)
+
+    def addItemContainer(self, itemContainer):
+        if not type(itemContainer.item) == list:
+            self.addItem(itemContainer.item)
+        else:
+            for i in itemContainer.item:
+                self.addItem(i)
+
+    def removeItemContainer(self, itemContainer):
+        itemContainer.display = False
+        if not type(itemContainer.item) == list:
+            self.removeItem(itemContainer.item)
+        else:
+            for i in itemContainer.item:
+                self.removeItem(i)
