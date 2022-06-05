@@ -159,8 +159,8 @@ class MeshViewerWidget(gl.GLViewWidget):
     def __init__(self, parent=None, devicePixelRatio=None, rotationMethod='euler'):
         super().__init__(parent, devicePixelRatio, rotationMethod)
         # self.setBackgroundColor(255,255,255)
-        self.setWindowTitle('pyqtgraph example: GLMeshItem')
-        self.setCameraPosition(distance=120)
+        self.setWindowTitle('3D Viewer')
+        self.setCameraPosition(distance=256)
 
         grid = gl.GLGridItem()
         grid.setColor((100, 100, 100))
@@ -174,13 +174,16 @@ class MeshViewerWidget(gl.GLViewWidget):
         self.pathContainer_list = []
         self.sampleContainer_list = []
 
-        self.load_example()
+        # self.load_example()
 
     def load_example(self):
         src_dir = os.path.dirname(os.path.abspath(__file__))
         self.load_mesh(os.path.join(src_dir, '../test_data/xuexiao_coarse.ply'))
         self.load_sample(os.path.join(src_dir, '../test_data/xuexiao_coarse_90.ply'))
         self.load_path(os.path.join(src_dir, '../test_data/final_trajectory.log'))
+
+    def load(self,path):
+        pass
 
     def load_mesh(self, mesh_path=r'F:\projects\DroneCenter\test_data\xuexiao_coarse.ply'):
         mesh_container = ViewerMeshItemContainer(mesh_path)

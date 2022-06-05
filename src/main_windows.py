@@ -1,3 +1,4 @@
+from posixpath import dirname
 from PySide6 import QtWidgets
 from PySide6 import QtCore
 from PySide6.QtWidgets import (
@@ -35,86 +36,7 @@ from pyqtgraph import LayoutWidget
 import trimesh
 import numpy as np
 
-class PainterWidget(QWidget):
-    """A widget where user can draw with their mouse
-
-    The user draws on a QPixmap which is itself paint from paintEvent()
-
-    """
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-        self.setFixedSize(680, 480)
-        self.pixmap = QPixmap(self.size())
-        self.pixmap.fill(Qt.white)
-
-        self.previous_pos = None
-        self.painter = QPainter()
-        self.pen = QPen()
-        self.pen.setWidth(10)
-        self.pen.setCapStyle(Qt.RoundCap)
-        self.pen.setJoinStyle(Qt.RoundJoin)
-
-    def paintEvent(self, event: QPaintEvent):
-        """Override method from QWidget
-
-        Paint the Pixmap into the widget
-
-        """
-        with QPainter(self) as painter:
-            painter.drawPixmap(0, 0, self.pixmap)
-
-    def mousePressEvent(self, event: QMouseEvent):
-        """Override from QWidget
-
-        Called when user clicks on the mouse
-
-        """
-        self.previous_pos = event.position().toPoint()
-        QWidget.mousePressEvent(self, event)
-
-    def mouseMoveEvent(self, event: QMouseEvent):
-        """Override method from QWidget
-
-        Called when user moves and clicks on the mouse
-
-        """
-        current_pos = event.position().toPoint()
-        self.painter.begin(self.pixmap)
-        self.painter.setRenderHints(QPainter.Antialiasing, True)
-        self.painter.setPen(self.pen)
-        self.painter.drawLine(self.previous_pos, current_pos)
-        self.painter.end()
-
-        self.previous_pos = current_pos
-        self.update()
-
-        QWidget.mouseMoveEvent(self, event)
-
-    def mouseReleaseEvent(self, event: QMouseEvent):
-        """Override method from QWidget
-
-        Called when user releases the mouse
-
-        """
-        self.previous_pos = None
-        QWidget.mouseReleaseEvent(self, event)
-
-    def save(self, filename: str):
-        """ save pixmap to filename """
-        self.pixmap.save(filename)
-
-    def load(self, filename: str):
-        """ load pixmap from filename """
-        self.pixmap.load(filename)
-        self.pixmap = self.pixmap.scaled(self.size(), Qt.KeepAspectRatio)
-        self.update()
-
-    def clear(self):
-        """ Clear the pixmap """
-        self.pixmap.fill(Qt.white)
-        self.update()
+from MeshViewerWidget import MeshViewerWidget
 
 class ObjectGroupParam(pTypes.GroupParameter):
     def __init__(self):
@@ -134,7 +56,8 @@ class MainWindow(QMainWindow):
         QMainWindow.__init__(self, parent)
         self.resize(1200,800)
 
-        self.painter_widget = PainterWidget()
+        self.graphics_viewer = MeshViewerWidget()
+
         self.bar = self.addToolBar("Menu")
         self.bar.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self._save_action = self.bar.addAction(
@@ -146,9 +69,20 @@ class MainWindow(QMainWindow):
         )
         self._open_action.setShortcut(QKeySequence.Open)
         self.bar.addAction(
-            qApp.style().standardIcon(QStyle.SP_DialogResetButton),
-            "Clear",
-            self.painter_widget.clear,
+            # qApp.style().standardIcon(QStyle.SP_DialogResetButton),
+            qApp.style().standardIcon(QStyle.SP_DialogOpenButton),
+            "Load Mesh",
+            self.on_load_mesh,
+        )
+        self.bar.addAction(
+            qApp.style().standardIcon(QStyle.SP_DialogOpenButton),
+            "Load Points",
+            self.on_load_points,
+        )
+        self.bar.addAction(
+            qApp.style().standardIcon(QStyle.SP_DialogOpenButton),
+            "Load Path",
+            self.on_load_path,
         )
         self.bar.addSeparator()
 
@@ -165,7 +99,6 @@ class MainWindow(QMainWindow):
 
         self.main_widget = QWidget()
         self.setCentralWidget(self.main_widget)
-        # self.setCentralWidget(self.main_widget)
         self.create_menu()
         self.main_layout = QVBoxLayout()
         self.main_layout.setContentsMargins(0,0,0,0)
@@ -184,10 +117,7 @@ class MainWindow(QMainWindow):
         self.tree2 = ParameterTree(showHeader=False)
         self.splitter.addWidget(self.tree2)
         self.splitter.addWidget(self.splitter2)
-        # self.set_3Dview_widget()
-        from MeshViewerWidget import MeshViewerWidget
-        self.graphics_views = MeshViewerWidget()
-        self.splitter2.addWidget(self.graphics_views)
+        self.splitter2.addWidget(self.graphics_viewer)
         self.splitter2.addWidget(self.tree)
 
         self.objectGroup = ObjectGroupParam()
@@ -271,6 +201,44 @@ class MainWindow(QMainWindow):
         self.params.restoreState(state, removeChildren=False)
         self.recalculate()
         
+    @Slot()
+    def on_load_mesh(self):
+        dialog = QFileDialog(self, "Load Mesh")
+        # dialog.setMimeTypeFilters(['mesh/ply', 'mesh/obj'])
+        dialog.setFileMode(QFileDialog.ExistingFile)
+        dialog.setAcceptMode(QFileDialog.AcceptOpen)
+        # dialog.setDefaultSuffix("ply")
+        dialog.setDirectory(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+
+        if dialog.exec() == QFileDialog.Accepted:
+            if dialog.selectedFiles():
+                self.graphics_viewer.load_mesh(dialog.selectedFiles()[0])
+
+    @Slot()
+    def on_load_points(self):
+        dialog = QFileDialog(self, "Load Points")
+        # dialog.setMimeTypeFilters(['mesh/ply', 'mesh/obj'])
+        dialog.setFileMode(QFileDialog.ExistingFile)
+        dialog.setAcceptMode(QFileDialog.AcceptOpen)
+        # dialog.setDefaultSuffix("ply")
+        dialog.setDirectory(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+
+        if dialog.exec() == QFileDialog.Accepted:
+            if dialog.selectedFiles():
+                self.graphics_viewer.load_sample(dialog.selectedFiles()[0])
+
+    @Slot()
+    def on_load_path(self):
+        dialog = QFileDialog(self, "Load Path")
+        # dialog.setMimeTypeFilters(['mesh/ply', 'mesh/obj'])
+        dialog.setFileMode(QFileDialog.ExistingFile)
+        dialog.setAcceptMode(QFileDialog.AcceptOpen)
+        # dialog.setDefaultSuffix(".log")
+        dialog.setDirectory(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+
+        if dialog.exec() == QFileDialog.Accepted:
+            if dialog.selectedFiles():
+                self.graphics_viewer.load_path(dialog.selectedFiles()[0])
 
     @Slot()
     def on_save(self):
@@ -284,9 +252,9 @@ class MainWindow(QMainWindow):
             QStandardPaths.writableLocation(QStandardPaths.PicturesLocation)
         )
 
-        if dialog.exec() == QFileDialog.Accepted:
-            if dialog.selectedFiles():
-                self.painter_widget.save(dialog.selectedFiles()[0])
+        # if dialog.exec() == QFileDialog.Accepted:
+        #     if dialog.selectedFiles():
+        #         self.painter_widget.save(dialog.selectedFiles()[0])
 
     @Slot()
     def on_open(self):
@@ -300,9 +268,9 @@ class MainWindow(QMainWindow):
             QStandardPaths.writableLocation(QStandardPaths.PicturesLocation)
         )
 
-        if dialog.exec() == QFileDialog.Accepted:
-            if dialog.selectedFiles():
-                self.painter_widget.load(dialog.selectedFiles()[0])
+        # if dialog.exec() == QFileDialog.Accepted:
+        #     if dialog.selectedFiles():
+        #         self.painter_widget.load(dialog.selectedFiles()[0])
 
     @Slot()
     def on_color_clicked(self):
@@ -318,7 +286,7 @@ class MainWindow(QMainWindow):
         pix_icon.fill(color)
 
         self.color_action.setIcon(QIcon(pix_icon))
-        self.painter_widget.pen.setColor(color)
+        # self.painter_widget.pen.setColor(color)
         self.color_action.setText(QColor(color).name())
 
 
