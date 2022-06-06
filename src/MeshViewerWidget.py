@@ -189,6 +189,7 @@ class MeshViewerWidget(gl.GLViewWidget):
         mesh_container = ViewerMeshItemContainer(mesh_path)
         self.meshContainer_list.append(mesh_container)
         self.addItemContainer(mesh_container)
+        return self, len(self.meshContainer_list)-1
 
     def load_path(self, log_path=r'F:\projects\DroneCenter\test_data\final_trajectory.log'):
         path_container = ViewerPathItemContainer(log_path)
@@ -201,6 +202,7 @@ class MeshViewerWidget(gl.GLViewWidget):
         self.addItemContainer(sample_container)
 
     def addItemContainer(self, itemContainer):
+        itemContainer.display = True
         if not type(itemContainer.item) == list:
             self.addItem(itemContainer.item)
         else:
