@@ -189,17 +189,19 @@ class MeshViewerWidget(gl.GLViewWidget):
         mesh_container = ViewerMeshItemContainer(mesh_path)
         self.meshContainer_list.append(mesh_container)
         self.addItemContainer(mesh_container)
-        return self, len(self.meshContainer_list)-1
+        return self, self.meshContainer_list, mesh_container
 
     def load_path(self, log_path=r'F:\projects\DroneCenter\test_data\final_trajectory.log'):
         path_container = ViewerPathItemContainer(log_path)
         self.pathContainer_list.append(path_container)
         self.addItemContainer(path_container)
+        return self, self.pathContainer_list, path_container
 
     def load_sample(self, sample_path=r'F:\projects\DroneCenter\test_data\xuexiao_coarse_90.ply'):
         sample_container = ViewerSampleItemContainer(sample_path)
         self.sampleContainer_list.append(sample_container)
         self.addItemContainer(sample_container)
+        return self, self.sampleContainer_list, sample_container
 
     def addItemContainer(self, itemContainer):
         itemContainer.display = True

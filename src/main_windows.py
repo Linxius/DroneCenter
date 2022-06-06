@@ -37,7 +37,7 @@ from pyqtgraph import LayoutWidget
 import trimesh
 import numpy as np
 
-from MeshViewerWidget import MeshViewerWidget
+from MeshViewerWidget import MeshViewerWidget, ViewerItemContainer
 
 class ObjectGroupParam(pTypes.GroupParameter):
     def __init__(self, main_windows):
@@ -47,30 +47,69 @@ class ObjectGroupParam(pTypes.GroupParameter):
     def addNew(self, typ):
         if typ == 'Mesh':
             self.addChild(MeshParam(self.main_windows))
+        elif typ == 'Points':
+            self.addChild(SampleParam(self.main_windows))
+        elif typ == 'Path':
+            self.addChild(PathParam(self.main_windows))
     
-class MeshParam(pTypes.GroupParameter):
+class ViewerItemParam(pTypes.GroupParameter):
     def __init__(self, main_windows, **kwds):
         self.main_windows = main_windows
-        self.mesh_viewer_widget, self.container_idx = self.main_windows.on_load_mesh()
-        self.mesh_container = self.mesh_viewer_widget.meshContainer_list[self.container_idx]
-        defs = dict(name='Mesh', autoIncrementName=True, renamable=True, removable=True, children=[
-            dict(name='filename', type='str', value=self.mesh_container.name),
-            dict(name='show', type='bool', value=bool(self.mesh_container.display)),
-            dict(name='containerIdx', type='int', value=self.container_idx, readonly=True),
+        self.setup()
+        defs = dict(name=self.itemtype, autoIncrementName=True, renamable=True, removable=True, children=[
+            dict(name='filename', type='str', value=self.item_container.name),
+            dict(name='show', type='bool', value=bool(self.item_container.display)),
             ])
         pTypes.GroupParameter.__init__(self, **defs)
         self.restoreState(kwds, removeChildren=False)
 
+    def setup(self):
+        self.mesh_viewer_widget, self.container_list, self.item_container = None, None, None
+        self.itemtype = None
+
+    def remove(self):
+        self.mesh_viewer_widget.removeItemContainer(self.item_container)
+        self.container_list.remove(self.item_container)
+        super().remove()
+
     def set_display(self):
-        if self['show'] == self.mesh_container.display:
+        if self['show'] == self.item_container.display:
             return
-        self.mesh_container.display = self['show']
+        self.item_container.display = self['show']
         if self['show'] == True:
-            self.mesh_viewer_widget.addItemContainer(self.mesh_container)
+            self.mesh_viewer_widget.addItemContainer(self.item_container)
         else:
-            self.mesh_viewer_widget.removeItemContainer(self.mesh_container)
-            
+            self.mesh_viewer_widget.removeItemContainer(self.item_container)
+    
+class MeshParam(ViewerItemParam):
+    def __init__(self, main_windows, **kwds):
+        super().__init__(main_windows, **kwds)
+
+    def setup(self):
+        self.mesh_viewer_widget, self.container_list, self.item_container = self.main_windows.on_load_mesh()
+        self.itemtype = 'Mesh'
+
 pTypes.registerParameterType('Mesh', MeshParam)
+    
+class SampleParam(ViewerItemParam):
+    def __init__(self, main_windows, **kwds):
+        super().__init__(main_windows, **kwds)
+
+    def setup(self):
+        self.mesh_viewer_widget, self.container_list, self.item_container = self.main_windows.on_load_sample()
+        self.itemtype = 'Points'
+            
+pTypes.registerParameterType('Points', SampleParam)
+    
+class PathParam(ViewerItemParam):
+    def __init__(self, main_windows, **kwds):
+        super().__init__(main_windows, **kwds)
+
+    def setup(self):
+        self.mesh_viewer_widget, self.container_list, self.item_container = self.main_windows.on_load_path()
+        self.itemtype = 'Path'
+            
+pTypes.registerParameterType('Path', MeshParam)
 
 
 class MainWindow(QMainWindow):
@@ -124,7 +163,7 @@ class MainWindow(QMainWindow):
         self.bar.addAction(
             qApp.style().standardIcon(QStyle.SP_DialogOpenButton),
             "Load Points",
-            self.on_load_points,
+            self.on_load_sample,
         )
         self.bar.addAction(
             qApp.style().standardIcon(QStyle.SP_DialogOpenButton),
@@ -178,7 +217,7 @@ class MainWindow(QMainWindow):
         # self.object_options.param('Load').sigActivated.connect(self.load())
         # self.object_options.param('Load Preset..').sigValueChanged.connect(self.loadPreset)
         self.object_options.sigTreeStateChanged.connect(self.on_objectTree_change)
-        self.object_objeGroupParam.sigTreeStateChanged.connect(self.on_objectOption_change)
+        # self.object_objeGroupParam.sigTreeStateChanged.connect(self.on_objectOption_change)
         
         ## read list of preset configs
         # presetDir = os.path.join(os.path.abspath(os.path.dirname(sys.argv[0])), 'presets')
@@ -188,43 +227,11 @@ class MainWindow(QMainWindow):
 
     def on_objectTree_change(self, *args):
         for object in self.object_options.param('Objects'):
-            # import pdb; pdb.set_trace()
             object.set_display()
-        for param, change, data in args[1]:
-            if change == 'childAdded':
-                print('test childadded changes')
-            if change == 'options':
-                print('test options changes')
-            if change == 'name':
-                print('test name changes')
-            if change == 'default':
-                print('test default changes')
-        # self.params.param('Reference Frame').setLimits(clocks)
-        # self.setAnimation(self.params['Animate'])
-
-    def on_objectOption_change(self, *args):
-        for param, change, data in args[1]:
-            if change == 'childAdded':
-                print('test object childadded changes')
-            if change == 'options':
-                print('test object options changes')
-            if change == 'name':
-                print('test object name changes')
-            if change == 'default':
-                print('test object default changes')
-            if change == 'contextMenu':
-                print('test object contextMenu changes')
+        # for param, change, data in args[1]:
+            # if change == 'childAdded':
+            # if change == 'childRemoved':
     
-
-    def treeChanged(self, *args):
-        clocks = []
-        for c in self.params.param('Objects'):
-            clocks.extend(c.clockNames())
-        #for param, change, data in args[1]:
-            #if change == 'childAdded':
-        self.params.param('Reference Frame').setLimits(clocks)
-        # self.setAnimation(self.params['Animate'])
-
     def setup_parameter_tree(self):
         self.parameter_tree = ParameterTree(showHeader=False)
         objectGroup = ObjectGroupParam(self)
@@ -304,24 +311,24 @@ class MainWindow(QMainWindow):
         dialog.setFileMode(QFileDialog.ExistingFile)
         dialog.setAcceptMode(QFileDialog.AcceptOpen)
         # dialog.setDefaultSuffix("ply")
-        dialog.setDirectory(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+        # dialog.setDirectory(str(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')))
 
         if dialog.exec() == QFileDialog.Accepted:
             if dialog.selectedFiles():
                 return self.graphics_viewer.load_mesh(dialog.selectedFiles()[0])
 
     @Slot()
-    def on_load_points(self):
+    def on_load_sample(self):
         dialog = QFileDialog(self, "Load Points")
         # dialog.setMimeTypeFilters(['mesh/ply', 'mesh/obj'])
         dialog.setFileMode(QFileDialog.ExistingFile)
         dialog.setAcceptMode(QFileDialog.AcceptOpen)
         # dialog.setDefaultSuffix("ply")
-        dialog.setDirectory(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+        # dialog.setDirectory(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
         if dialog.exec() == QFileDialog.Accepted:
             if dialog.selectedFiles():
-                self.graphics_viewer.load_sample(dialog.selectedFiles()[0])
+                return self.graphics_viewer.load_sample(dialog.selectedFiles()[0])
 
     @Slot()
     def on_load_path(self):
@@ -330,11 +337,11 @@ class MainWindow(QMainWindow):
         dialog.setFileMode(QFileDialog.ExistingFile)
         dialog.setAcceptMode(QFileDialog.AcceptOpen)
         # dialog.setDefaultSuffix(".log")
-        dialog.setDirectory(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+        # dialog.setDirectory(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
         if dialog.exec() == QFileDialog.Accepted:
             if dialog.selectedFiles():
-                self.graphics_viewer.load_path(dialog.selectedFiles()[0])
+                return self.graphics_viewer.load_path(dialog.selectedFiles()[0])
 
     @Slot()
     def on_save(self):
