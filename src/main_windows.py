@@ -56,7 +56,7 @@ class ViewerItemParam(pTypes.GroupParameter):
     def __init__(self, main_windows, **kwds):
         self.main_windows = main_windows
         self.setup()
-        defs = dict(name=self.itemtype, autoIncrementName=True, renamable=True, removable=True, children=[
+        defs = dict(name=self.itemtype, autoIncrementName=True, renamable=False, removable=True, children=[
             dict(name='filename', type='str', value=self.item_container.name),
             dict(name='show', type='bool', value=bool(self.item_container.display)),
             ])
@@ -81,9 +81,19 @@ class ViewerItemParam(pTypes.GroupParameter):
         else:
             self.mesh_viewer_widget.removeItemContainer(self.item_container)
     
+    def set_select(self, param):
+        limits = self.main_windows.object_options.param(param).opts['limits']
+        name = self.name() 
+        name += str(len(self.main_windows.object_options.param(param).opts['limits']))
+        limits.append(name)
+        self.main_windows.object_options.param(param).setLimits([''])
+        self.main_windows.object_options.param(param).setLimits(limits)
+        pass
+    
 class MeshParam(ViewerItemParam):
     def __init__(self, main_windows, **kwds):
         super().__init__(main_windows, **kwds)
+        self.set_select('selected mesh')
 
     def setup(self):
         self.mesh_viewer_widget, self.container_list, self.item_container = self.main_windows.on_load_mesh()
@@ -94,16 +104,18 @@ pTypes.registerParameterType('Mesh', MeshParam)
 class SampleParam(ViewerItemParam):
     def __init__(self, main_windows, **kwds):
         super().__init__(main_windows, **kwds)
+        self.set_select('selected samples')
 
     def setup(self):
         self.mesh_viewer_widget, self.container_list, self.item_container = self.main_windows.on_load_sample()
         self.itemtype = 'Points'
-            
+
 pTypes.registerParameterType('Points', SampleParam)
     
 class PathParam(ViewerItemParam):
     def __init__(self, main_windows, **kwds):
         super().__init__(main_windows, **kwds)
+        self.set_select('selected path')
 
     def setup(self):
         self.mesh_viewer_widget, self.container_list, self.item_container = self.main_windows.on_load_path()
@@ -148,7 +160,7 @@ class MainWindow(QMainWindow):
         self.splitter.addWidget(self.splitter2)
         self.splitter2.addWidget(self.graphics_viewer)
         self.splitter2.addWidget(self.parameter_tree)
-        self.splitter.setStretchFactor(0, 1)
+        self.splitter.setStretchFactor(0, 2)
         self.splitter.setStretchFactor(1, 3)
 
     def setup_toolbar(self):
@@ -202,13 +214,15 @@ class MainWindow(QMainWindow):
         
         self.object_options = Parameter.create(name='params', type='group', children=[
             dict(name='Load Preset..', type='list', limits=[]),
-            #dict(name='Unit System', type='list', limits=['', 'MKS']),
-            dict(name='Duration', type='float', value=10.0, step=0.1, limits=[0.1, None]),
-            dict(name='Reference Frame', type='list', limits=[]),
-            dict(name='Animate', type='bool', value=True),
-            dict(name='Animation Speed', type='float', value=1.0, dec=True, step=0.1, limits=[0.0001, None]),
-            dict(name='Save', type='action'),
-            dict(name='Load', type='action'),
+            dict(name='selected mesh', type='list', limits=['']),
+            dict(name='selected samples', type='list', limits=['']),
+            dict(name='selected path', type='list', limits=['']),
+            # dict(name='Duration', type='float', value=10.0, step=0.1, limits=[0.1, None]),
+            # dict(name='Reference Frame', type='list', limits=[]),
+            # dict(name='Animate', type='bool', value=True),
+            # dict(name='Animation Speed', type='float', value=1.0, dec=True, step=0.1, limits=[0.0001, None]),
+            # dict(name='Save', type='action'),
+            # dict(name='Load', type='action'),
             self.object_objeGroupParam,
             ])
         self.object_list_tree.setParameters(self.object_options, showTop=False)
@@ -216,8 +230,16 @@ class MainWindow(QMainWindow):
         # self.object_options.param('Save').sigActivated.connect(self.save())
         # self.object_options.param('Load').sigActivated.connect(self.load())
         # self.object_options.param('Load Preset..').sigValueChanged.connect(self.loadPreset)
+        self.selected_mesh = None
+        self.selected_mesh_name = None
+        self.selected_sample = None
+        self.selected_sample_name = None
+        self.selected_path = None
+        self.selected_path_name = None
+        self.object_options.param('selected mesh').sigValueChanged.connect(self.on_select_mesh)
+        self.object_options.param('selected samples').sigValueChanged.connect(self.on_select_sample)
+        self.object_options.param('selected path').sigValueChanged.connect(self.on_select_path)
         self.object_options.sigTreeStateChanged.connect(self.on_objectTree_change)
-        # self.object_objeGroupParam.sigTreeStateChanged.connect(self.on_objectOption_change)
         
         ## read list of preset configs
         # presetDir = os.path.join(os.path.abspath(os.path.dirname(sys.argv[0])), 'presets')
@@ -228,9 +250,51 @@ class MainWindow(QMainWindow):
     def on_objectTree_change(self, *args):
         for object in self.object_options.param('Objects'):
             object.set_display()
-        # for param, change, data in args[1]:
-            # if change == 'childAdded':
-            # if change == 'childRemoved':
+
+        for param, change, data in args[1]:
+            if change == 'childAdded':
+                if self.object_options.param('selected mesh').value() == '' and \
+                        len(self.object_options.param('selected mesh').opts['limits']) > 1:
+                    if self.selected_mesh_name == None:
+                        self.selected_mesh_name = self.object_options.param('selected mesh').opts['limits'][1]
+                    self.object_options.param('selected mesh').setValue(self.selected_mesh_name)
+                if self.object_options.param('selected samples').value() == '' and \
+                        len(self.object_options.param('selected samples').opts['limits']) > 1:
+                    if self.selected_sample_name == None:
+                        self.selected_sample_name = self.object_options.param('selected samples').opts['limits'][1]
+                    self.object_options.param('selected samples').setValue(self.selected_sample_name)
+                if self.object_options.param('selected path').value() == '' and \
+                        len(self.object_options.param('selected path').opts['limits']) > 1:
+                    if self.selected_path_name == None:
+                        self.selected_path_name = self.object_options.param('selected path').opts['limits'][1]
+                    self.object_options.param('selected path').setValue(self.selected_path_name)
+
+    def on_select_mesh(self, param, selected_mesh_name):
+        self.selected_mesh_name = selected_mesh_name
+        mesh_num = len(self.object_options.param('selected mesh').opts['limits'])-1
+        for obj in self.object_options.param('Objects'):
+            if obj.itemtype == 'Mesh':
+                if obj.name()+str(mesh_num) == selected_mesh_name:
+                    self.selected_mesh = obj.item_container.mesh
+                    break
+
+    def on_select_sample(self, param, selected_sample_name):
+        self.selected_sample_name = selected_sample_name
+        sample_num = len(self.object_options.param('selected samples').opts['limits'])-1
+        for obj in self.object_options.param('Objects'):
+            if obj.itemtype == 'Points':
+                if obj.name()+str(sample_num) == selected_sample_name:
+                    self.selected_sample = obj.item_container.sample
+                    break
+
+    def on_select_path(self, param, selected_path_name):
+        self.selected_mesh_name = selected_path_name
+        path_num = len(self.object_options.param('selected path').opts['limits'])-1
+        for obj in self.object_options.param('Objects'):
+            if obj.itemtype == 'Path':
+                if obj.name()+str(path_num) == selected_path_name:
+                    self.selected_path = obj.item_container.path
+                    break
     
     def setup_parameter_tree(self):
         self.parameter_tree = ParameterTree(showHeader=False)
