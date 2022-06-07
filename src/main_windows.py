@@ -45,19 +45,19 @@ class ObjectGroupParam(pTypes.GroupParameter):
         pTypes.GroupParameter.__init__(self, name="Objects", addText="Add New..", addList=['Mesh', 'Points', 'Path'])
         self.main_windows = main_windows
         
-    def addNew(self, typ):
+    def addNew(self, typ, path=None):
         if typ == 'Mesh':
-            self.addChild(MeshParam(self.main_windows))
+            self.addChild(MeshParam(self.main_windows, path))
         elif typ == 'Points':
-            self.addChild(SampleParam(self.main_windows))
+            self.addChild(SampleParam(self.main_windows, path))
         elif typ == 'Path':
-            self.addChild(PathParam(self.main_windows))
+            self.addChild(PathParam(self.main_windows, path))
     
 class ViewerItemParam(pTypes.GroupParameter):
     count = None
-    def __init__(self, main_windows, **kwds):
+    def __init__(self, main_windows, path=None, **kwds):
         self.main_windows = main_windows
-        self.setup()
+        self.setup(path)
         defs = dict(name=self.itemtype, autoIncrementName=True, renamable=False, removable=True, children=[
             dict(name='filename', type='str', value=self.item_container.name),
             dict(name='show', type='bool', value=bool(self.item_container.display)),
@@ -65,9 +65,9 @@ class ViewerItemParam(pTypes.GroupParameter):
         pTypes.GroupParameter.__init__(self, **defs)
         self.restoreState(kwds, removeChildren=False)
 
-    def setup(self):
-        self.mesh_viewer_widget, self.container_list, self.item_container = None, None, None
-        self.itemtype = None
+    # def setup(self, path=None):
+    #     self.mesh_viewer_widget, self.container_list, self.item_container = None, None, None
+    #     self.itemtype = None
 
     def remove(self):
         self.mesh_viewer_widget.removeItemContainer(self.item_container)
@@ -98,8 +98,8 @@ class ViewerItemParam(pTypes.GroupParameter):
     
 class MeshParam(ViewerItemParam):
     count = 0
-    def __init__(self, main_windows, **kwds):
-        super().__init__(main_windows, **kwds)
+    def __init__(self, main_windows, path=None, **kwds):
+        super().__init__(main_windows, path, **kwds)
         name = self.name() 
         if MeshParam.count != 0:
             name += str(MeshParam.count)
@@ -107,8 +107,8 @@ class MeshParam(ViewerItemParam):
         self.opts['name'] = name
         self.set_select('selected mesh')
 
-    def setup(self):
-        self.mesh_viewer_widget, self.container_list, self.item_container = self.main_windows.load_mesh()
+    def setup(self, path=None):
+        self.mesh_viewer_widget, self.container_list, self.item_container = self.main_windows.load_mesh(path)
         self.itemtype = 'Mesh'
 
     def remove(self):
@@ -122,8 +122,8 @@ pTypes.registerParameterType('Mesh', MeshParam)
     
 class SampleParam(ViewerItemParam):
     count = 0
-    def __init__(self, main_windows, **kwds):
-        super().__init__(main_windows, **kwds)
+    def __init__(self, main_windows, path=None, **kwds):
+        super().__init__(main_windows, path, **kwds)
         name = self.name() 
         if SampleParam.count != 0:
             name += str(SampleParam.count)
@@ -131,8 +131,8 @@ class SampleParam(ViewerItemParam):
         self.opts['name'] = name
         self.set_select('selected sample')
 
-    def setup(self):
-        self.mesh_viewer_widget, self.container_list, self.item_container = self.main_windows.load_sample()
+    def setup(self, path=None):
+        self.mesh_viewer_widget, self.container_list, self.item_container = self.main_windows.load_sample(path)
         self.itemtype = 'Points'
 
     def remove(self):
@@ -146,8 +146,8 @@ pTypes.registerParameterType('Points', SampleParam)
     
 class PathParam(ViewerItemParam):
     count = 0
-    def __init__(self, main_windows, **kwds):
-        super().__init__(main_windows, **kwds)
+    def __init__(self, main_windows, path=None, **kwds):
+        super().__init__(main_windows, path, **kwds)
         name = self.name() 
         if PathParam.count != 0:
             name += str(PathParam.count)
@@ -155,8 +155,8 @@ class PathParam(ViewerItemParam):
         self.opts['name'] = name
         self.set_select('selected path')
 
-    def setup(self):
-        self.mesh_viewer_widget, self.container_list, self.item_container = self.main_windows.load_path()
+    def setup(self, path=None):
+        self.mesh_viewer_widget, self.container_list, self.item_container = self.main_windows.load_path(path)
         self.itemtype = 'Path'
 
     def remove(self):
@@ -212,6 +212,11 @@ class MainWindow(QMainWindow):
         self.bar = self.addToolBar("Tool Bar")
         self.bar.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.bar.addAction(
+            qApp.style().standardIcon(QStyle.SP_DialogOpenButton),
+            "Load Example",
+            self.on_load_example,
+        )
+        self.bar.addAction(
             # qApp.style().standardIcon(QStyle.SP_DialogResetButton),
             qApp.style().standardIcon(QStyle.SP_DialogOpenButton),
             "Load Mesh",
@@ -226,6 +231,11 @@ class MainWindow(QMainWindow):
             qApp.style().standardIcon(QStyle.SP_DialogOpenButton),
             "Load Path",
             self.on_load_path_toolbar,
+        )
+        self.bar.addAction(
+            qApp.style().standardIcon(QStyle.SP_DialogResetButton),
+            "Clear",
+            self.on_clear_objects,
         )
         self.bar.addSeparator()
 
@@ -420,49 +430,67 @@ class MainWindow(QMainWindow):
     def on_load_mesh_toolbar(self):
         self.object_objeGroupParam.addNew('Mesh')
 
-    def load_mesh(self):
-        dialog = QFileDialog(self, "Load Mesh")
-        # dialog.setMimeTypeFilters(['mesh/ply', 'mesh/obj'])
-        dialog.setFileMode(QFileDialog.ExistingFile)
-        dialog.setAcceptMode(QFileDialog.AcceptOpen)
-        # dialog.setDefaultSuffix("ply")
-        # dialog.setDirectory(str(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')))
-
-        if dialog.exec() == QFileDialog.Accepted:
-            if dialog.selectedFiles():
-                return self.graphics_viewer.load_mesh(dialog.selectedFiles()[0])
+    def load_mesh(self, path=None):
+        if path == None:
+            dialog = QFileDialog(self, "Load Mesh")
+            # dialog.setMimeTypeFilters(['mesh/ply', 'mesh/obj'])
+            dialog.setFileMode(QFileDialog.ExistingFile)
+            dialog.setAcceptMode(QFileDialog.AcceptOpen)
+            # dialog.setDefaultSuffix("ply")
+            # dialog.setDirectory(str(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')))
+            if dialog.exec() == QFileDialog.Accepted:
+                if dialog.selectedFiles():
+                    return self.graphics_viewer.load_mesh(dialog.selectedFiles()[0])
+        else:
+            return self.graphics_viewer.load_mesh(path)
 
     @Slot()
     def on_load_sample_toobar(self):
         self.object_objeGroupParam.addNew('Points')
 
-    def load_sample(self):
-        dialog = QFileDialog(self, "Load Points")
-        # dialog.setMimeTypeFilters(['mesh/ply', 'mesh/obj'])
-        dialog.setFileMode(QFileDialog.ExistingFile)
-        dialog.setAcceptMode(QFileDialog.AcceptOpen)
-        # dialog.setDefaultSuffix("ply")
-        # dialog.setDirectory(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-
-        if dialog.exec() == QFileDialog.Accepted:
-            if dialog.selectedFiles():
-                return self.graphics_viewer.load_sample(dialog.selectedFiles()[0])
+    def load_sample(self, path=None):
+        if path == None:
+            dialog = QFileDialog(self, "Load Points")
+            dialog.setFileMode(QFileDialog.ExistingFile)
+            dialog.setAcceptMode(QFileDialog.AcceptOpen)
+            if dialog.exec() == QFileDialog.Accepted:
+                if dialog.selectedFiles():
+                    return self.graphics_viewer.load_sample(dialog.selectedFiles()[0])
+        else:
+            return self.graphics_viewer.load_sample(path)
 
     @Slot()
     def on_load_path_toolbar(self):
         self.object_objeGroupParam.addNew('Path')
 
-    def load_path(self):
-        dialog = QFileDialog(self, "Load Path")
-        # dialog.setMimeTypeFilters(['mesh/ply', 'mesh/obj'])
-        dialog.setFileMode(QFileDialog.ExistingFile)
-        dialog.setAcceptMode(QFileDialog.AcceptOpen)
-        # dialog.setDefaultSuffix(".log")
-        # dialog.setDirectory(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+    @Slot()
+    def on_load_example(self):
+        self.object_objeGroupParam.addNew('Mesh', 'test_data/xuexiao_coarse.ply')
+        self.object_objeGroupParam.addNew('Points', 'test_data/xuexiao_coarse_90.ply')
+        self.object_objeGroupParam.addNew('Path', 'test_data/final_trajectory.log')
 
-        if dialog.exec() == QFileDialog.Accepted:
-            if dialog.selectedFiles():
-                return self.graphics_viewer.load_path(dialog.selectedFiles()[0])
+    @Slot()
+    def on_clear_objects(self):
+        # import pdb; pdb.set_trace()
+        for object in self.object_options.param('Objects'):
+            # self.object_options.param('Objects').removeChild(object)
+            object.remove()
+        # TODO bug here: can not clear all the objects at once
+        for object in self.object_options.param('Objects'):
+            # self.object_options.param('Objects').removeChild(object)
+            object.remove()
+        pass
+
+    def load_path(self, path=None):
+        if path == None:
+            dialog = QFileDialog(self, "Load Path")
+            dialog.setFileMode(QFileDialog.ExistingFile)
+            dialog.setAcceptMode(QFileDialog.AcceptOpen)
+            if dialog.exec() == QFileDialog.Accepted:
+                if dialog.selectedFiles():
+                    return self.graphics_viewer.load_path(dialog.selectedFiles()[0])
+        else:
+            return self.graphics_viewer.load_path(path)
 
     @Slot()
     def on_save(self):
