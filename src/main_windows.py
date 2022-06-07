@@ -108,7 +108,7 @@ class MeshParam(ViewerItemParam):
         self.set_select('selected mesh')
 
     def setup(self):
-        self.mesh_viewer_widget, self.container_list, self.item_container = self.main_windows.on_load_mesh()
+        self.mesh_viewer_widget, self.container_list, self.item_container = self.main_windows.load_mesh()
         self.itemtype = 'Mesh'
 
     def remove(self):
@@ -132,7 +132,7 @@ class SampleParam(ViewerItemParam):
         self.set_select('selected sample')
 
     def setup(self):
-        self.mesh_viewer_widget, self.container_list, self.item_container = self.main_windows.on_load_sample()
+        self.mesh_viewer_widget, self.container_list, self.item_container = self.main_windows.load_sample()
         self.itemtype = 'Points'
 
     def remove(self):
@@ -156,7 +156,7 @@ class PathParam(ViewerItemParam):
         self.set_select('selected path')
 
     def setup(self):
-        self.mesh_viewer_widget, self.container_list, self.item_container = self.main_windows.on_load_path()
+        self.mesh_viewer_widget, self.container_list, self.item_container = self.main_windows.load_path()
         self.itemtype = 'Path'
 
     def remove(self):
@@ -215,17 +215,17 @@ class MainWindow(QMainWindow):
             # qApp.style().standardIcon(QStyle.SP_DialogResetButton),
             qApp.style().standardIcon(QStyle.SP_DialogOpenButton),
             "Load Mesh",
-            self.on_load_mesh,
+            self.on_load_mesh_toolbar,
         )
         self.bar.addAction(
             qApp.style().standardIcon(QStyle.SP_DialogOpenButton),
             "Load Points",
-            self.on_load_sample,
+            self.on_load_sample_toobar,
         )
         self.bar.addAction(
             qApp.style().standardIcon(QStyle.SP_DialogOpenButton),
             "Load Path",
-            self.on_load_path,
+            self.on_load_path_toolbar,
         )
         self.bar.addSeparator()
 
@@ -417,7 +417,10 @@ class MainWindow(QMainWindow):
         self.recalculate()
         
     @Slot()
-    def on_load_mesh(self):
+    def on_load_mesh_toolbar(self):
+        self.object_objeGroupParam.addNew('Mesh')
+
+    def load_mesh(self):
         dialog = QFileDialog(self, "Load Mesh")
         # dialog.setMimeTypeFilters(['mesh/ply', 'mesh/obj'])
         dialog.setFileMode(QFileDialog.ExistingFile)
@@ -430,7 +433,10 @@ class MainWindow(QMainWindow):
                 return self.graphics_viewer.load_mesh(dialog.selectedFiles()[0])
 
     @Slot()
-    def on_load_sample(self):
+    def on_load_sample_toobar(self):
+        self.object_objeGroupParam.addNew('Points')
+
+    def load_sample(self):
         dialog = QFileDialog(self, "Load Points")
         # dialog.setMimeTypeFilters(['mesh/ply', 'mesh/obj'])
         dialog.setFileMode(QFileDialog.ExistingFile)
@@ -443,7 +449,10 @@ class MainWindow(QMainWindow):
                 return self.graphics_viewer.load_sample(dialog.selectedFiles()[0])
 
     @Slot()
-    def on_load_path(self):
+    def on_load_path_toolbar(self):
+        self.object_objeGroupParam.addNew('Path')
+
+    def load_path(self):
         dialog = QFileDialog(self, "Load Path")
         # dialog.setMimeTypeFilters(['mesh/ply', 'mesh/obj'])
         dialog.setFileMode(QFileDialog.ExistingFile)
