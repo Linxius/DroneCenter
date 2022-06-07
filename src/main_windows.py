@@ -1,3 +1,4 @@
+from pathlib import Path
 from posixpath import dirname
 from PySide6 import QtWidgets
 from PySide6 import QtCore
@@ -53,6 +54,7 @@ class ObjectGroupParam(pTypes.GroupParameter):
             self.addChild(PathParam(self.main_windows))
     
 class ViewerItemParam(pTypes.GroupParameter):
+    count = None
     def __init__(self, main_windows, **kwds):
         self.main_windows = main_windows
         self.setup()
@@ -83,43 +85,86 @@ class ViewerItemParam(pTypes.GroupParameter):
     
     def set_select(self, param):
         limits = self.main_windows.object_options.param(param).opts['limits']
-        name = self.name() 
-        name += str(len(self.main_windows.object_options.param(param).opts['limits']))
-        limits.append(name)
+        limits.append(self.name())
+        self.main_windows.object_options.param(param).setLimits([''])
+        self.main_windows.object_options.param(param).setLimits(limits)
+
+    def reselect(self, param):
+        limits = self.main_windows.object_options.param(param).opts['limits']
+        limits.remove(self.name())
         self.main_windows.object_options.param(param).setLimits([''])
         self.main_windows.object_options.param(param).setLimits(limits)
         pass
     
 class MeshParam(ViewerItemParam):
+    count = 0
     def __init__(self, main_windows, **kwds):
         super().__init__(main_windows, **kwds)
+        name = self.name() 
+        if MeshParam.count != 0:
+            name += str(MeshParam.count)
+        MeshParam.count += 1
+        self.opts['name'] = name
         self.set_select('selected mesh')
 
     def setup(self):
         self.mesh_viewer_widget, self.container_list, self.item_container = self.main_windows.on_load_mesh()
         self.itemtype = 'Mesh'
 
+    def remove(self):
+        super().reselect('selected mesh')
+        if self.name() == self.main_windows.object_options.param('selected mesh').value():
+            self.main_windows.selected_mesh_name = ''
+            self.main_windows.selected_mesh = None
+        super().remove()
+    
 pTypes.registerParameterType('Mesh', MeshParam)
     
 class SampleParam(ViewerItemParam):
+    count = 0
     def __init__(self, main_windows, **kwds):
         super().__init__(main_windows, **kwds)
-        self.set_select('selected samples')
+        name = self.name() 
+        if SampleParam.count != 0:
+            name += str(SampleParam.count)
+        SampleParam.count += 1
+        self.opts['name'] = name
+        self.set_select('selected sample')
 
     def setup(self):
         self.mesh_viewer_widget, self.container_list, self.item_container = self.main_windows.on_load_sample()
         self.itemtype = 'Points'
 
+    def remove(self):
+        super().reselect('selected sample')
+        if self.name() == self.main_windows.object_options.param('selected sample').value():
+            self.main_windows.selected_sample_name = ''
+            self.main_windows.selected_sample = None
+        super().remove()
+
 pTypes.registerParameterType('Points', SampleParam)
     
 class PathParam(ViewerItemParam):
+    count = 0
     def __init__(self, main_windows, **kwds):
         super().__init__(main_windows, **kwds)
+        name = self.name() 
+        if PathParam.count != 0:
+            name += str(PathParam.count)
+        PathParam.count += 1
+        self.opts['name'] = name
         self.set_select('selected path')
 
     def setup(self):
         self.mesh_viewer_widget, self.container_list, self.item_container = self.main_windows.on_load_path()
         self.itemtype = 'Path'
+
+    def remove(self):
+        super().reselect('selected path')
+        if self.name() == self.main_windows.object_options.param('selected path').value():
+            self.main_windows.selected_path_name = ''
+            self.main_windows.selected_path = None
+        super().remove()
             
 pTypes.registerParameterType('Path', MeshParam)
 
@@ -215,7 +260,7 @@ class MainWindow(QMainWindow):
         self.object_options = Parameter.create(name='params', type='group', children=[
             dict(name='Load Preset..', type='list', limits=[]),
             dict(name='selected mesh', type='list', limits=['']),
-            dict(name='selected samples', type='list', limits=['']),
+            dict(name='selected sample', type='list', limits=['']),
             dict(name='selected path', type='list', limits=['']),
             # dict(name='Duration', type='float', value=10.0, step=0.1, limits=[0.1, None]),
             # dict(name='Reference Frame', type='list', limits=[]),
@@ -237,7 +282,7 @@ class MainWindow(QMainWindow):
         self.selected_path = None
         self.selected_path_name = None
         self.object_options.param('selected mesh').sigValueChanged.connect(self.on_select_mesh)
-        self.object_options.param('selected samples').sigValueChanged.connect(self.on_select_sample)
+        self.object_options.param('selected sample').sigValueChanged.connect(self.on_select_sample)
         self.object_options.param('selected path').sigValueChanged.connect(self.on_select_path)
         self.object_options.sigTreeStateChanged.connect(self.on_objectTree_change)
         
@@ -252,20 +297,23 @@ class MainWindow(QMainWindow):
             object.set_display()
 
         for param, change, data in args[1]:
-            if change == 'childAdded':
-                if self.object_options.param('selected mesh').value() == '' and \
+            if change == 'childAdded' or change == 'childRemoved':
+                if (self.object_options.param('selected mesh').value() == '' or\
+                    self.object_options.param('selected mesh').value() == None) and \
                         len(self.object_options.param('selected mesh').opts['limits']) > 1:
-                    if self.selected_mesh_name == None:
+                    if self.selected_mesh_name == None or self.selected_mesh_name == '':
                         self.selected_mesh_name = self.object_options.param('selected mesh').opts['limits'][1]
                     self.object_options.param('selected mesh').setValue(self.selected_mesh_name)
-                if self.object_options.param('selected samples').value() == '' and \
-                        len(self.object_options.param('selected samples').opts['limits']) > 1:
-                    if self.selected_sample_name == None:
-                        self.selected_sample_name = self.object_options.param('selected samples').opts['limits'][1]
-                    self.object_options.param('selected samples').setValue(self.selected_sample_name)
-                if self.object_options.param('selected path').value() == '' and \
+                if (self.object_options.param('selected sample').value() == '' or\
+                    self.object_options.param('selected sample').value() == None) and \
+                        len(self.object_options.param('selected sample').opts['limits']) > 1:
+                    if self.selected_sample_name == None or self.selected_sample_name == '':
+                        self.selected_sample_name = self.object_options.param('selected sample').opts['limits'][1]
+                    self.object_options.param('selected sample').setValue(self.selected_sample_name)
+                if (self.object_options.param('selected path').value() == '' or\
+                    self.object_options.param('selected path').value() == None) and \
                         len(self.object_options.param('selected path').opts['limits']) > 1:
-                    if self.selected_path_name == None:
+                    if self.selected_path_name == None or self.selected_path_name == '':
                         self.selected_path_name = self.object_options.param('selected path').opts['limits'][1]
                     self.object_options.param('selected path').setValue(self.selected_path_name)
 
@@ -280,7 +328,7 @@ class MainWindow(QMainWindow):
 
     def on_select_sample(self, param, selected_sample_name):
         self.selected_sample_name = selected_sample_name
-        sample_num = len(self.object_options.param('selected samples').opts['limits'])-1
+        sample_num = len(self.object_options.param('selected sample').opts['limits'])-1
         for obj in self.object_options.param('Objects'):
             if obj.itemtype == 'Points':
                 if obj.name()+str(sample_num) == selected_sample_name:
@@ -288,7 +336,7 @@ class MainWindow(QMainWindow):
                     break
 
     def on_select_path(self, param, selected_path_name):
-        self.selected_mesh_name = selected_path_name
+        self.selected_path_name = selected_path_name
         path_num = len(self.object_options.param('selected path').opts['limits'])-1
         for obj in self.object_options.param('Objects'):
             if obj.itemtype == 'Path':
